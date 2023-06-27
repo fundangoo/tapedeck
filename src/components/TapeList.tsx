@@ -1,9 +1,10 @@
-import React, { useContext, useMemo, useState } from 'react';
+import React, { useContext, useEffect, useMemo, useState } from 'react';
 import { TAPE_SORT_OPTIONS, useTapes } from '../api/tapedeck-api';
 import TapeCard from './TapeCard';
 import Select from './Select';
 import sortBy from 'lodash/sortBy';
 import FilterContext from '../context/FilterContext';
+import InfiniteScroll from 'react-infinite-scroll-component';
 
 const getResultCount = (count: number) => {
   switch (count) {
@@ -16,9 +17,12 @@ const getResultCount = (count: number) => {
   }
 };
 
+const ITEMS_TO_LOAD = 50;
+
 const TapeList: React.FC = (): JSX.Element => {
   const { data: tapes } = useTapes();
   const [sortKey, setSortKey] = useState<string>('brand');
+  const [chunksToDisplay, setChunksToDisplay] = useState<number>(1);
   const { getFilterCategories, getFiltersByCategory, isFilterSelected } = useContext(FilterContext);
 
   const filteredTapes = useMemo(() => {
@@ -35,6 +39,12 @@ const TapeList: React.FC = (): JSX.Element => {
 
   const sortedTapes = useMemo(() => sortBy(filteredTapes, sortKey), [filteredTapes, sortKey]);
 
+  const tapesToDisplay = sortedTapes.slice(0, ITEMS_TO_LOAD * chunksToDisplay);
+
+  useEffect(() => {
+    setChunksToDisplay(1);
+  }, [sortKey, getFiltersByCategory]);
+
   const onSort = (value: string) => setSortKey(value);
 
   return (
@@ -43,11 +53,18 @@ const TapeList: React.FC = (): JSX.Element => {
         <span>{getResultCount(sortedTapes.length)}</span>
         <Select label="SORT BY" options={TAPE_SORT_OPTIONS} onSelect={onSort} />
       </div>
-      <div className="m-3 gap-3 grid grid-cols-tapeList">
-        {sortedTapes.map((tape) => (
-          <TapeCard tape={tape} key={tape.id} />
-        ))}
-      </div>
+      <InfiniteScroll
+        dataLength={tapesToDisplay.length}
+        hasMore={tapesToDisplay.length != sortedTapes.length}
+        loader="LOADING"
+        next={() => setChunksToDisplay((chunksToDisplay) => chunksToDisplay + 1)}
+      >
+        <div className="m-3 gap-3 grid grid-cols-tapeList">
+          {tapesToDisplay.map((tape) => (
+            <TapeCard tape={tape} key={tape.id} />
+          ))}
+        </div>
+      </InfiniteScroll>
     </div>
   );
 };

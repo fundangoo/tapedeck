@@ -1,4 +1,4 @@
-import React, { PropsWithChildren, createContext, useState } from 'react';
+import React, { PropsWithChildren, createContext, useCallback, useReducer } from 'react';
 
 type CategoryKey = string;
 type FilterKey = string;
@@ -16,32 +16,29 @@ export type Filters = {
 
 type FilterState = {
   filters: Filters;
-  setFilters: (filters: Filters) => void;
-  toggleFilter: (category: string, filter: string) => void;
-  resetFilters: () => void;
-  getFilterCategories: () => string[];
-  getFiltersByCategory: (category: string) => string[];
-  getFilterCount: (category: string, filter: string) => number;
-  isFilterSelected: (category: string, filter: string) => boolean;
 };
 
-const FilterContext = createContext<FilterState>({
-  filters: {},
-  setFilters: () => {}, // eslint-disable-line
-  toggleFilter: () => {}, // eslint-disable-line
-  resetFilters: () => {}, // eslint-disable-line
-  getFilterCategories: () => [],
-  getFiltersByCategory: () => [],
-  getFilterCount: () => 0,
-  isFilterSelected: () => false,
-});
+const enum FILTER_ACTION_TYPE {
+  SET,
+  TOGGLE,
+  RESET,
+}
 
-const FilterContextProvider: React.FC<PropsWithChildren> = ({ children }): JSX.Element => {
-  const initialValue: FilterState = {
-    filters: {} as Filters,
-    setFilters: (filters: Filters) => setState((state) => ({ ...state, filters })),
-    toggleFilter: (category: string, filter: string) =>
-      setState((state) => ({
+type FilterAction = {
+  type: FILTER_ACTION_TYPE;
+  payload?: any; // eslint-disable-line
+};
+
+type FilterReducer = (state: FilterState, action: FilterAction) => FilterState;
+
+const filterReducer: FilterReducer = (state: FilterState, { type, payload }: FilterAction) => {
+  switch (type) {
+    case FILTER_ACTION_TYPE.SET: {
+      return { ...state, filters: payload };
+    }
+    case FILTER_ACTION_TYPE.TOGGLE: {
+      const { category, filter } = payload;
+      return {
         ...state,
         filters: {
           ...state.filters,
@@ -53,39 +50,104 @@ const FilterContextProvider: React.FC<PropsWithChildren> = ({ children }): JSX.E
             },
           },
         },
-      })),
-    resetFilters: () =>
-      setState((state) => {
-        const resettedFilters = { ...state.filters };
-        Object.keys(resettedFilters).forEach((category) => {
-          resettedFilters[category] = { ...state.filters[category] };
-          Object.keys(resettedFilters[category]).forEach(
-            (filter) => (resettedFilters[category][filter].selected = false)
-          );
-        });
-        return {
-          ...state,
-          filters: resettedFilters,
-        };
+      };
+    }
+    case FILTER_ACTION_TYPE.RESET: {
+      const resettedFilters = { ...state.filters };
+      Object.keys(resettedFilters).forEach((category) => {
+        resettedFilters[category] = { ...state.filters[category] };
+        Object.keys(resettedFilters[category]).forEach(
+          (filter) => (resettedFilters[category][filter].selected = false)
+        );
+      });
+      return {
+        ...state,
+        filters: resettedFilters,
+      };
+    }
+    default:
+      return state;
+  }
+};
+
+const initialFilterState: FilterState = { filters: {} };
+
+const useFilterContext = () => {
+  const [filterState, dispatch] = useReducer(filterReducer, initialFilterState);
+
+  const setFilters = useCallback(
+    (filters: Filters) =>
+      dispatch({
+        type: FILTER_ACTION_TYPE.SET,
+        payload: filters,
       }),
-    getFilterCategories: () => [],
-    getFiltersByCategory: () => [],
-    getFilterCount: () => 0,
-    isFilterSelected: () => false,
+    []
+  );
+
+  const toggleFilter = useCallback(
+    (category: string, filter: string) =>
+      dispatch({
+        type: FILTER_ACTION_TYPE.TOGGLE,
+        payload: {
+          category,
+          filter,
+        },
+      }),
+    []
+  );
+
+  const resetFilters = useCallback(
+    () =>
+      dispatch({
+        type: FILTER_ACTION_TYPE.RESET,
+      }),
+    []
+  );
+
+  const getFilterCategories = useCallback(() => Object.keys(filterState.filters), [filterState]);
+
+  const getFiltersByCategory = useCallback(
+    (category: string) => Object.keys(filterState.filters[category]),
+    [filterState]
+  );
+
+  const getFilterCount = useCallback(
+    (category: string, filter: string) => filterState.filters[category][filter]?.count,
+    [filterState]
+  );
+
+  const isFilterSelected = useCallback(
+    (category: string, filter: string) => filterState.filters[category][filter]?.selected,
+    [filterState]
+  );
+
+  return {
+    filterState,
+    setFilters,
+    toggleFilter,
+    resetFilters,
+    getFilterCategories,
+    getFiltersByCategory,
+    getFilterCount,
+    isFilterSelected,
   };
+};
 
-  const [state, setState] = useState<FilterState>(initialValue);
+type UseFilterContextType = ReturnType<typeof useFilterContext>;
 
-  const filterContext = {
-    ...state,
-    getFilterCategories: () => Object.keys(state.filters),
-    getFiltersByCategory: (category: string) => Object.keys(state.filters[category]),
-    getFilterCount: (category: string, filter: string) => state.filters[category][filter]?.count,
-    isFilterSelected: (category: string, filter: string) =>
-      state.filters[category][filter]?.selected,
-  };
+const FilterContext = createContext<UseFilterContextType>({
+  filterState: initialFilterState,
+  setFilters: () => undefined,
+  toggleFilter: () => undefined,
+  resetFilters: () => undefined,
+  getFilterCategories: () => [],
+  getFiltersByCategory: () => [],
+  getFilterCount: () => 0,
+  isFilterSelected: () => false,
+});
 
-  return <FilterContext.Provider value={filterContext}>{children}</FilterContext.Provider>;
+const FilterContextProvider: React.FC<PropsWithChildren> = ({ children }): JSX.Element => {
+  return <FilterContext.Provider value={useFilterContext()}>{children}</FilterContext.Provider>;
 };
 
 export { FilterContextProvider };
